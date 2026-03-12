@@ -1,0 +1,7 @@
+<div class="text-center">
+    <h2>Payment Failed</h2>
+    <p class="text-danger">@(TempData["PaymentError"] ?? "There was a problem processing your payment.")</p>
+    <p>Please try again or contact support if the issue persists.</p>
+    <a class="btn btn-primary" asp-action="Checkout">Try Again</a>
+    <a class="btn btn-secondary" asp-controller="Home">Return to Store</a>
+</div>
