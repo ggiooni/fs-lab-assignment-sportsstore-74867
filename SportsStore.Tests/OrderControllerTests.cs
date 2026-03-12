@@ -1,77 +1,85 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ViewFeatures;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SportsStore.Controllers;
 using SportsStore.Models;
+using SportsStore.Services;
 using Xunit;
 
 namespace SportsStore.Tests {
 
     public class OrderControllerTests {
 
+        private OrderController CreateController(Mock<IOrderRepository> mock, Cart cart) {
+            var paymentMock = new Mock<IPaymentService>();
+            paymentMock.Setup(p => p.CreateCheckoutSessionAsync(
+                    It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync("https://checkout.stripe.com/test");
+
+            var controller = new OrderController(mock.Object, cart,
+                paymentMock.Object, NullLogger<OrderController>.Instance);
+
+            controller.ControllerContext = new ControllerContext {
+                HttpContext = new DefaultHttpContext()
+            };
+            controller.TempData = new TempDataDictionary(
+                controller.ControllerContext.HttpContext,
+                Mock.Of<ITempDataProvider>());
+
+            return controller;
+        }
+
         [Fact]
-        public void Cannot_Checkout_Empty_Cart() {
-            // Arrange - create a mock repository
+        public async Task Cannot_Checkout_Empty_Cart() {
+            // Arrange
             Mock<IOrderRepository> mock = new Mock<IOrderRepository>();
-            // Arrange - create an empty cart
             Cart cart = new Cart();
-            // Arrange - create the order
             Order order = new Order();
-            // Arrange - create an instance of the controller
-            OrderController target = new OrderController(mock.Object, cart);
+            OrderController target = CreateController(mock, cart);
 
             // Act
-            ViewResult? result = target.Checkout(order) as ViewResult;
+            ViewResult? result = await target.Checkout(order) as ViewResult;
 
-            // Assert - check that the order hasn't been stored 
+            // Assert
             mock.Verify(m => m.SaveOrder(It.IsAny<Order>()), Times.Never);
-            // Assert - check that the method is returning the default view
             Assert.True(string.IsNullOrEmpty(result?.ViewName));
-            // Assert - check that I am passing an invalid model to the view
             Assert.False(result?.ViewData.ModelState.IsValid);
         }
 
         [Fact]
-        public void Cannot_Checkout_Invalid_ShippingDetails() {
-
-            // Arrange - create a mock order repository
+        public async Task Cannot_Checkout_Invalid_ShippingDetails() {
+            // Arrange
             Mock<IOrderRepository> mock = new Mock<IOrderRepository>();
-            // Arrange - create a cart with one item
             Cart cart = new Cart();
             cart.AddItem(new Product(), 1);
-            // Arrange - create an instance of the controller
-            OrderController target = new OrderController(mock.Object, cart);
-            // Arrange - add an error to the model
+            OrderController target = CreateController(mock, cart);
             target.ModelState.AddModelError("error", "error");
 
-            // Act - try to checkout
-            ViewResult? result = target.Checkout(new Order()) as ViewResult;
+            // Act
+            ViewResult? result = await target.Checkout(new Order()) as ViewResult;
 
-            // Assert - check that the order hasn't been passed stored
+            // Assert
             mock.Verify(m => m.SaveOrder(It.IsAny<Order>()), Times.Never);
-            // Assert - check that the method is returning the default view
             Assert.True(string.IsNullOrEmpty(result?.ViewName));
-            // Assert - check that I am passing an invalid model to the view
             Assert.False(result?.ViewData.ModelState.IsValid);
         }
 
         [Fact]
-        public void Can_Checkout_And_Submit_Order() {
-            // Arrange - create a mock order repository
+        public async Task Can_Checkout_And_Submit_Order() {
+            // Arrange
             Mock<IOrderRepository> mock = new Mock<IOrderRepository>();
-            // Arrange - create a cart with one item
             Cart cart = new Cart();
             cart.AddItem(new Product(), 1);
-            // Arrange - create an instance of the controller
-            OrderController target = new OrderController(mock.Object, cart);
+            OrderController target = CreateController(mock, cart);
 
-            // Act - try to checkout
-            RedirectToPageResult? result =
-                    target.Checkout(new Order()) as RedirectToPageResult;
+            // Act
+            RedirectResult? result = await target.Checkout(new Order()) as RedirectResult;
 
-            // Assert - check that the order has been stored
+            // Assert
             mock.Verify(m => m.SaveOrder(It.IsAny<Order>()), Times.Once);
-            // Assert - check that the method is redirecting to the Completed action
-            Assert.Equal("/Completed", result?.PageName);
+            Assert.Contains("stripe.com", result?.Url ?? "");
         }
     }
 }

@@ -28,4 +28,10 @@ Desktop.ini
 
 ## Logs
 logs/
+Logs/
 *.log
+
+## Claude
+.claude/
+CLAUDE.md
+CLAUDE.txt
